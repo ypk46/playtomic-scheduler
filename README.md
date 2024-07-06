@@ -1,6 +1,6 @@
-# Flask Demo
+# Playtomic Scheduler
 
-A demo server-side application built with Flask.
+An automated scheduling tool designed to streamline court reservations on Playtomic, specifically for users in the Dominican Republic. This tool aims to simplify the booking process by automatically reserving available courts based on user preferences and availability.
 
 ## Prerequesites
 
