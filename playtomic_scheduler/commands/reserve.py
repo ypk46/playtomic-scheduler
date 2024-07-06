@@ -2,12 +2,16 @@
 import json
 import logging
 from typing import Text, Optional
+from datetime import datetime, timedelta
 
 # 3rd party imports
+import pytz
 import click
 
 # Project imports
-from playtomic_scheduler.utils.dir import setup_dir
+from playtomic_scheduler.config import settings
+from playtomic_scheduler.utils import date, directory
+from playtomic_scheduler.helpers.reserver import Reserver
 from playtomic_scheduler.helpers.playtomic import Playtomic
 
 logger = logging.getLogger("playtomic-scheduler-cli")
@@ -43,7 +47,7 @@ def reserve(
     """
     Reserve court through Playtomic based on provided configuration.
     """
-    config_path = setup_dir()
+    config_path = directory.setup_dir()
     config_file_path = config_path.joinpath("config.json")
 
     if not config_file_path.exists():
@@ -65,3 +69,8 @@ def reserve(
     if not days or not hours or not duration:
         logger.info("You need to provide all the required options.")
         return
+
+    reserver = Reserver(playtomic, days, hours, duration)
+
+    for tenant in settings.tenants:
+        reserver.process_tenant(tenant)

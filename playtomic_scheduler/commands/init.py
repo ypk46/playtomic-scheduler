@@ -8,7 +8,7 @@ import click
 from requests.exceptions import HTTPError
 
 # Project imports
-from playtomic_scheduler.utils.dir import setup_dir
+from playtomic_scheduler.utils.directory import setup_dir
 from playtomic_scheduler.helpers.playtomic import Playtomic
 
 logger = logging.getLogger("playtomic-scheduler-cli")

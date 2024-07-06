@@ -1,5 +1,5 @@
 # Native imports
-from typing import Optional, Text
+from typing import Optional, Text, List, Dict
 
 # 3rd party imports
 from pydantic import Field
@@ -15,6 +15,22 @@ class Settings(BaseSettings):
 
     # CLI configuration
     config_path: Optional[Text] = Field(default=None, alias="PLAYTOMIC_SCHEDULER_PATH")
+
+    # Constants
+    tenants: List[Dict] = [
+        {
+            "id": "6b2efacb-a5b4-43cc-bca3-abca920c7a22",
+            "name": "PADEL REPUBLIC",
+        },
+        {
+            "id": "245b2d22-73f6-44be-ab5b-2e466ed83b99",
+            "name": "PADEL OASIS",
+        },
+        {
+            "id": "2ebd809b-9986-4384-9543-f1c574620e38",
+            "name": "THE NET",
+        },
+    ]
 
 
 settings = Settings()

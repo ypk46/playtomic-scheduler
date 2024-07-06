@@ -1,10 +1,20 @@
 # Native imports
-from typing import Text
 from datetime import datetime
+from typing import Text, Dict, List
 from typing_extensions import TypedDict
 
 # 3rd party imports
+import pytz
 import requests
+
+
+# Constants
+API_URL = "https://playtomic.io/api/v1"
+AUTH_URL = "https://playtomic.io/api/v3"
+USER_AGENT = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3"
+)
 
 
 class AuthPayload(TypedDict):
@@ -15,14 +25,12 @@ class AuthPayload(TypedDict):
     user_id: Text
 
 
+class PaymentIntent(TypedDict):
+    payment_intent_id: Text
+    available_payment_methods: List
+
+
 class Playtomic:
-    # Constants
-    API_URL = "https://playtomic.io/api/v1"
-    AUTH_URL = "https://playtomic.io/api/v3"
-    USER_AGENT = (
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-        "(KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3"
-    )
 
     # Attributes
     email: Text
@@ -42,7 +50,7 @@ class Playtomic:
         Get default headers for API requests.
         """
         return {
-            "User-Agent": self.USER_AGENT,
+            "User-Agent": USER_AGENT,
             "X-Requested-With": "com.playtomic.web",
         }
 
@@ -50,7 +58,7 @@ class Playtomic:
         """
         Login to Playtomic API.
         """
-        url = f"{self.AUTH_URL}/auth/login"
+        url = f"{AUTH_URL}/auth/login"
         data = {"email": self.email, "password": self.password}
 
         # Make HTTP request
@@ -74,7 +82,7 @@ class Playtomic:
         if not self.access_token:
             self.login()
 
-        url = f"{self.API_URL}/availability"
+        url = f"{API_URL}/availability"
         params = {
             "user_id": "me",
             "tenant_id": tenant_id,
@@ -89,7 +97,52 @@ class Playtomic:
 
         return response.json()
 
-    def create_payment_intent(
+    def create_payment_intent(self, data: Dict) -> PaymentIntent:
+        """
+        Create a payment intent for a given tenant (court).
+        """
+        if not self.access_token:
+            self.login()
+
+        url = f"{API_URL}/payment_intents"
+
+        # Make HTTP request
+        response = self.session.post(url, json=data, timeout=5)
+        response.raise_for_status()
+
+        return response.json()
+
+    def update_payment_intent(self, payment_intent_id: Text, data: Dict):
+        """
+        Update the payment intent.
+        """
+        if not self.access_token:
+            self.login()
+
+        url = f"{API_URL}/payment_intents/{payment_intent_id}"
+
+        # Make HTTP request
+        response = self.session.patch(url, json=data, timeout=5)
+        response.raise_for_status()
+
+        return response.json()
+
+    def confirm_reservation(self, payment_intent_id: Text):
+        """
+        Confirm a reservation.
+        """
+        if not self.access_token:
+            self.login()
+
+        url = f"{API_URL}/payment_intents/{payment_intent_id}/confirmation"
+
+        # Make HTTP request
+        response = self.session.post(url, timeout=5)
+        response.raise_for_status()
+
+        return response.json()
+
+    def prepare_payment_intent_data(
         self,
         tenant_id: Text,
         resource_id: Text,
@@ -97,15 +150,39 @@ class Playtomic:
         duration: float,
     ):
         """
-        Create a payment intent for a given tenant (court).
+        Prepare the payment intent data.
         """
-        if not self.access_token:
-            self.login()
-
-        url = f"{self.API_URL}/payment_intents"
-
-        # Make HTTP request
-        response = self.session.get(url, timeout=5)
-        response.raise_for_status()
-
-        return response.json()
+        # Prepare data
+        utc_start_date = start_date.astimezone(pytz.utc)
+        return {
+            "allowed_payment_method_types": [
+                "OFFER",
+                "CASH",
+                "MERCHANT_WALLET",
+                "DIRECT",
+                "SWISH",
+                "IDEAL",
+                "BANCONTACT",
+                "PAYTRAIL",
+                "CREDIT_CARD",
+                "QUICK_PAY",
+            ],
+            "user_id": self.user_id,
+            "cart": {
+                "requested_item": {
+                    "cart_item_type": "CUSTOMER_MATCH",
+                    "cart_item_voucher_id": None,
+                    "cart_item_data": {
+                        "supports_split_payment": True,
+                        "number_of_players": 4,
+                        "tenant_id": tenant_id,
+                        "resource_id": resource_id,
+                        "start": utc_start_date.strftime("%Y-%m-%dT%H:%M:%S"),
+                        "duration": duration,
+                        "match_registrations": [
+                            {"user_id": self.user_id, "pay_now": True}
+                        ],
+                    },
+                }
+            },
+        }
