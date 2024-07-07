@@ -26,6 +26,7 @@ def cli():
 # Add commands
 cli.add_command(init)
 cli.add_command(reserve)
+cli.add_command(schedule_cmd)
 
 if __name__ == "__main__":
     cli()

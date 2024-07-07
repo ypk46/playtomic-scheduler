@@ -1,10 +1,11 @@
 # Native imports
 import json
+import time
 import logging
-from typing import Text, Optional
 
 # 3rd party imports
 import click
+import schedule
 
 # Project imports
 from playtomic_scheduler.config import settings
@@ -15,35 +16,17 @@ from playtomic_scheduler.helpers.playtomic import Playtomic
 logger = logging.getLogger("playtomic-scheduler-cli")
 
 
-@click.command("reserve")
+@click.command("schedule")
 @click.option(
-    "-d",
-    "--days",
-    type=str,
-    required=False,
-    help="Which days of the week would you like to reserve courts? (e.g. 2,3 for Tue and Wed)",
+    "-m",
+    "--minutes",
+    type=int,
+    default=10,
+    help="How often should the scheduler check for available courts (in minutes)",
 )
-@click.option(
-    "-h",
-    "--hours",
-    type=str,
-    required=False,
-    help="At which starting hours would you like to reserve courts? (e.g. 20:00)",
-)
-@click.option(
-    "-u",
-    "--duration",
-    type=click.Choice(["1", "1.5", "2"]),
-    required=False,
-    help="How many hours would you like to reserve the court for",
-)
-def reserve(
-    days: Optional[Text],
-    hours: Optional[Text],
-    duration: Optional[Text],
-):
+def schedule_cmd(minutes: int):
     """
-    Reserve court through Playtomic based on provided configuration.
+    Schedule reservation checks until a reservation is confirmed.
     """
     config_path = directory.setup_dir()
     config_file_path = config_path.joinpath("config.json")
@@ -60,9 +43,9 @@ def reserve(
     playtomic = Playtomic(config["email"], config["password"])
     playtomic.login()
 
-    days = days or config.get("days")
-    hours = hours or config.get("hours")
-    duration = duration or config.get("duration")
+    days = config.get("days")
+    hours = config.get("hours")
+    duration = config.get("duration")
 
     if not days or not hours or not duration:
         logger.info("You need to provide all the required options.")
@@ -70,5 +53,17 @@ def reserve(
 
     reserver = Reserver(playtomic, days, hours, duration)
 
-    for tenant in settings.tenants:
-        reserver.process_tenant(tenant)
+    def reservation_check():
+        """
+        Check for available courts and reserve them if available.
+        """
+        reserver.playtomic.login()
+        for tenant in settings.tenants:
+            reserver.process_tenant(tenant)
+
+    schedule.every(minutes).minutes.do(reservation_check)
+
+    logger.info("Starting scheduler! Running checks every %s minutes...", minutes)
+    while reserver.reservation_confirmed is False:
+        schedule.run_pending()
+        time.sleep(1)

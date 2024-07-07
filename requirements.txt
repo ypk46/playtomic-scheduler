@@ -17,6 +17,7 @@ pydantic_core==2.18.4
 python-dotenv==1.0.1
 pytz==2024.1
 requests==2.32.3
+schedule==1.2.2
 typing_extensions==4.12.2
 tzlocal==5.2
 urllib3==2.2.2

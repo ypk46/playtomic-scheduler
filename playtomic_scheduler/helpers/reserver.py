@@ -3,6 +3,9 @@ import logging
 from typing import List, Dict, Text
 from datetime import datetime, timedelta
 
+# 3rd party imports
+from requests.exceptions import HTTPError
+
 # Project imports
 from playtomic_scheduler.utils import date
 from .playtomic import Playtomic
@@ -136,32 +139,44 @@ class Reserver:
             tenant_id,
             resource_id,
             start_date,
-            self.duration * 60,
+            int(self.duration * 60),
         )
 
-        # Create payment intent
-        payment_intent = self.playtomic.create_payment_intent(data)
+        try:
+            # Create payment intent
+            payment_intent = self.playtomic.create_payment_intent(data)
 
-        # Update payment intent
-        payment_methods = payment_intent.get("available_payment_methods")
-        payment_method = next(
-            (
-                method
-                for method in payment_methods
-                if method["name"] == "Pay at the club"
-            ),
-            None,
-        )
-        data = {
-            "selected_payment_method_id": payment_method.get("payment_method_id"),
-            "selected_payment_method_data": None,
-        }
-        self.playtomic.update_payment_intent(payment_intent.get("id"), data)
+            # Update payment intent
+            payment_methods = payment_intent.get("available_payment_methods")
+            payment_method = next(
+                (
+                    method
+                    for method in payment_methods
+                    if method["name"] == "Pay at the club"
+                ),
+                None,
+            )
+            data = {
+                "selected_payment_method_id": payment_method.get("payment_method_id"),
+                "selected_payment_method_data": None,
+            }
+            self.playtomic.update_payment_intent(
+                payment_intent.get("payment_intent_id"), data
+            )
 
-        # Confirm reservation
-        self.playtomic.confirm_reservation(payment_intent.get("id"))
+            # Confirm reservation
+            self.playtomic.confirm_reservation(payment_intent.get("payment_intent_id"))
 
-        logger.info(
-            "Reservation confirmed on %s", start_date.strftime("%Y %b %d - %I:%M %p")
-        )
-        self.reservation_confirmed = True
+            logger.info(
+                "Reservation confirmed on %s",
+                start_date.strftime("%Y %b %d - %I:%M %p"),
+            )
+            self.reservation_confirmed = True
+        except HTTPError as err:
+            logger.exception(
+                {
+                    "data": data,
+                    "message": err.response.text,
+                    "status_code": err.response.status_code,
+                }
+            )
