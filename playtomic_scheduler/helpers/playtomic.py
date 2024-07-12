@@ -30,6 +30,12 @@ class PaymentIntent(TypedDict):
     available_payment_methods: List
 
 
+class Match(TypedDict):
+    match_id: Text
+    start_date: Text
+    status: Text
+
+
 class Playtomic:
 
     # Attributes
@@ -138,6 +144,22 @@ class Playtomic:
 
         # Make HTTP request
         response = self.session.post(url, timeout=5)
+        response.raise_for_status()
+
+        return response.json()
+
+    def get_matches(self, size: int, sort: Text) -> List[Match]:
+        """
+        Get list of matches.
+        """
+        if not self.access_token:
+            self.login()
+
+        url = f"{API_URL}/matches"
+        params = {"size": str(size), "sort": sort, "owner_id": self.user_id}
+
+        # Make HTTP request
+        response = self.session.get(url, params=params, timeout=5)
         response.raise_for_status()
 
         return response.json()

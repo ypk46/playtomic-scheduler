@@ -66,7 +66,7 @@ class Reserver:
 
         return target_dates
 
-    def process_tenant(self, tenant: dict):
+    def process_tenant(self, tenant: dict, reservations_per_week: int = 1):
         """
         Process the tenant and reserve the court.
         """
@@ -74,9 +74,30 @@ class Reserver:
         tenant_name = tenant.get("name")
         logger.info("Verifying courts for %s...", tenant_name)
 
+        # Check matches for the week
+        week_matches = 0
+        matches = self.playtomic.get_matches(10, "start_date,desc")
+        for match in matches:
+            # Skip if match is not pending
+            if match.get("status") != "PENDING":
+                continue
+
+            # Check if match is within the current week
+            match_date = match.get("start_date")
+            match_date = datetime.strptime(match_date, "%Y-%m-%dT%H:%M:%S")
+            match_date = date.parse_utc_to_local(match_date)
+
+            if date.is_within_current_week(match_date):
+                week_matches += 1
+
         # Setup start and end date
         start_date = date.set_start_of_day(datetime.now())
-        end_date = date.set_end_of_day(datetime.now())
+
+        # Skip current week if limit reached
+        if week_matches >= reservations_per_week:
+            start_date += timedelta(days=7 - start_date.weekday())
+
+        end_date = date.set_end_of_day(start_date)
         search_date_limit = datetime.now() + timedelta(days=7)
 
         while start_date < search_date_limit:

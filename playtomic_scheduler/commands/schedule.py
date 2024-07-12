@@ -46,6 +46,7 @@ def schedule_cmd(minutes: int):
     days = config.get("days")
     hours = config.get("hours")
     duration = config.get("duration")
+    reservations_per_week = config.get("reservations_per_week") or 1
 
     if not days or not hours or not duration:
         logger.info("You need to provide all the required options.")
@@ -59,7 +60,7 @@ def schedule_cmd(minutes: int):
         """
         reserver.playtomic.login()
         for tenant in settings.tenants:
-            reserver.process_tenant(tenant)
+            reserver.process_tenant(tenant, reservations_per_week)
 
     schedule.every(minutes).minutes.do(reservation_check)
 

@@ -78,9 +78,16 @@ def init():
             default="1.5",
         )
 
+        reservations_per_week = click.prompt(
+            "How many reservations per week would you like to make?",
+            type=int,
+            default=1,
+        )
+
         config["days"] = days
         config["hours"] = hours
         config["duration"] = duration
+        config["reservations_per_week"] = reservations_per_week
 
     with open(config_file_path, "w") as config_file:
         config_file.write(json.dumps(config))

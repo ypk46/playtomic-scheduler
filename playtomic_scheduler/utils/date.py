@@ -1,6 +1,5 @@
 # Native imports
-from zoneinfo import ZoneInfo
-from datetime import datetime
+from datetime import datetime, timedelta
 
 # 3rd party imports
 import pytz
@@ -56,3 +55,16 @@ def parse_utc_to_local(utc_date: datetime):
     utc_date = utc_date.replace(tzinfo=pytz.UTC)
     local_timezone = get_local_timezone()
     return utc_date.astimezone(pytz.timezone(local_timezone))
+
+
+def is_within_current_week(date: datetime):
+    """
+    Check if the provided start date is within the current week.
+    """
+    current_date = set_start_of_day(date)
+
+    # Get the start and end of the week
+    start_of_week = current_date - timedelta(days=current_date.weekday())
+    end_of_week = start_of_week + timedelta(days=6)
+
+    return start_of_week <= date <= end_of_week

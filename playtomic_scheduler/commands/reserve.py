@@ -63,6 +63,7 @@ def reserve(
     days = days or config.get("days")
     hours = hours or config.get("hours")
     duration = duration or config.get("duration")
+    reservations_per_week = config.get("reservations_per_week") or 1
 
     if not days or not hours or not duration:
         logger.info("You need to provide all the required options.")
@@ -71,4 +72,4 @@ def reserve(
     reserver = Reserver(playtomic, days, hours, duration)
 
     for tenant in settings.tenants:
-        reserver.process_tenant(tenant)
+        reserver.process_tenant(tenant, reservations_per_week)
