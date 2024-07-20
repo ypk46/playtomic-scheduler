@@ -26,10 +26,6 @@ class Settings(BaseSettings):
             "id": "245b2d22-73f6-44be-ab5b-2e466ed83b99",
             "name": "PADEL OASIS",
         },
-        {
-            "id": "2ebd809b-9986-4384-9543-f1c574620e38",
-            "name": "THE NET",
-        },
     ]
 
 
