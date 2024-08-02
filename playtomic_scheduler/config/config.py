@@ -19,12 +19,12 @@ class Settings(BaseSettings):
     # Constants
     tenants: List[Dict] = [
         {
-            "id": "6b2efacb-a5b4-43cc-bca3-abca920c7a22",
-            "name": "PADEL REPUBLIC",
-        },
-        {
             "id": "245b2d22-73f6-44be-ab5b-2e466ed83b99",
             "name": "PADEL OASIS",
+        },
+        {
+            "id": "6b2efacb-a5b4-43cc-bca3-abca920c7a22",
+            "name": "PADEL REPUBLIC",
         },
     ]
 
