@@ -93,9 +93,12 @@ class Reserver:
         # Setup start and end date
         start_date = date.set_start_of_day(datetime.now())
 
-        # Skip current week if limit reached
         if week_matches >= reservations_per_week:
+            # Skip current week if limit reached
             start_date += timedelta(days=7 - start_date.weekday())
+        else:
+            # If no matches currently, skip to the next 2 day
+            start_date += timedelta(days=2)
 
         end_date = date.set_end_of_day(start_date)
         search_date_limit = datetime.now() + timedelta(days=7)
