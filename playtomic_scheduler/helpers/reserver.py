@@ -100,7 +100,6 @@ class Reserver:
             # If no matches currently, skip to the next 2 day
             start_date += timedelta(days=2)
 
-        end_date = date.set_end_of_day(start_date)
         search_date_limit = datetime.now() + timedelta(days=7)
 
         while start_date < search_date_limit:
@@ -108,7 +107,6 @@ class Reserver:
             availability_entries = self.playtomic.fetch_availability(
                 tenant_id,
                 start_date,
-                end_date,
             )
 
             # Process each availability entry
@@ -116,9 +114,8 @@ class Reserver:
             for entry in availability_entries:
                 self.process_availibility(entry, tenant_id)
 
-            # Increment the dates
+            # Increment the date
             start_date += timedelta(days=1)
-            end_date += timedelta(days=1)
 
     def process_availibility(self, entry: Dict, tenant_id: str):
         """
