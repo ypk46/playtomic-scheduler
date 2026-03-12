@@ -1,4 +1,8 @@
 # Native imports
+import re
+import json
+import base64
+import logging
 from datetime import datetime
 from typing import Text, Dict, List
 from typing_extensions import TypedDict
@@ -7,21 +11,21 @@ from typing_extensions import TypedDict
 import pytz
 import requests
 
+logger = logging.getLogger("playtomic-scheduler-cli")
 
 # Constants
-API_URL = "https://playtomic.io/api/v1"
-AUTH_URL = "https://playtomic.io/api/v3"
+API_URL = "https://playtomic.com/api"
+AUTH_URL = "https://app.playtomic.com"
+LOGIN_URL = f"{AUTH_URL}/login"
 USER_AGENT = (
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-    "(KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3"
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
 )
 
 
 class AuthPayload(TypedDict):
     access_token: Text
-    access_token_expiration: Text
     refresh_token: Text
-    refresh_token_expriation: Text
     user_id: Text
 
 
@@ -48,53 +52,140 @@ class Playtomic:
     def __init__(self, email: Text, password: Text):
         self.email = email
         self.password = password
+        self.access_token = None
+        self.user_id = None
         self.session = requests.Session()
-        self.session.headers.update(self.__get_headers())
+        self.session.headers.update({"User-Agent": USER_AGENT})
 
-    def __get_headers(self):
+    @staticmethod
+    def __decode_jwt_payload(token: Text) -> Dict:
+        """Decode the payload from a JWT token without verification."""
+        # JWT structure: header.payload.signature
+        payload_b64 = token.split(".")[1]
+        # Add padding if needed
+        padding = 4 - len(payload_b64) % 4
+        if padding != 4:
+            payload_b64 += "=" * padding
+        payload_bytes = base64.urlsafe_b64decode(payload_b64)
+        return json.loads(payload_bytes)
+
+    def __fetch_login_action_params(self) -> Dict[Text, Text]:
+        """Fetch the login page and extract Next.js Server Action parameters.
+
+        The login page contains hidden form fields with the action ID and key
+        that are generated at build time. This method scrapes them dynamically
+        so they don't need to be hardcoded.
         """
-        Get default headers for API requests.
-        """
-        return {
-            "User-Agent": USER_AGENT,
-            "X-Requested-With": "com.playtomic.web",
-        }
+        response = self.session.get(LOGIN_URL, timeout=10)
+        response.raise_for_status()
+        html = response.text
+
+        # Extract ACTION_ID from: name="$ACTION_1:0" value='{"id":"<ACTION_ID>",...}'
+        action_id_match = re.search(
+            r'name="\$ACTION_1:0"[^>]*value="([^"]*)"', html
+        )
+        if not action_id_match:
+            raise ValueError("Could not find ACTION_ID on the login page.")
+
+        # The value is HTML-encoded JSON, decode &quot; -> "
+        action_value = action_id_match.group(1).replace("&quot;", '"')
+        action_data = json.loads(action_value)
+        action_id = action_data["id"]
+
+        # Extract ACTION_KEY from: name="$ACTION_KEY" value="<ACTION_KEY>"
+        action_key_match = re.search(
+            r'name="\$ACTION_KEY"[^>]*value="([^"]*)"', html
+        )
+        if not action_key_match:
+            raise ValueError("Could not find ACTION_KEY on the login page.")
+
+        action_key = action_key_match.group(1)
+
+        logger.info("Fetched login action params: id=%s, key=%s", action_id, action_key)
+        return {"action_id": action_id, "action_key": action_key}
 
     def login(self) -> AuthPayload:
-        """
-        Login to Playtomic API.
-        """
-        url = f"{AUTH_URL}/auth/login"
-        data = {"email": self.email, "password": self.password}
+        """Login to Playtomic via the app.playtomic.com login endpoint."""
+        # Dynamically fetch the Next.js action ID and key from the login page
+        action_params = self.__fetch_login_action_params()
+        action_id = action_params["action_id"]
+        action_key = action_params["action_key"]
 
-        # Make HTTP request
-        response = self.session.post(url, json=data, timeout=5)
-        response.raise_for_status()
-        response: AuthPayload = response.json()
+        url = f"{LOGIN_URL}?return_url=https%3A%2F%2Fplaytomic.com%2F"
 
-        # Get user ID and access token
-        self.access_token = response.get("access_token")
-        self.user_id = response.get("user_id")
+        # Build multipart form fields matching the Next.js Server Action format
+        action_ref = json.dumps({"id": action_id, "bound": "$@1"})
+        action_bound = json.dumps(
+            [{"action": "login", "returnURL": "https://playtomic.com/",
+              "callbackURL": "$undefined"}]
+        )
+        form_fields = {
+            "1_$ACTION_REF_1": (None, ""),
+            "1_$ACTION_1:0": (None, action_ref),
+            "1_$ACTION_1:1": (None, action_bound),
+            "1_$ACTION_KEY": (None, action_key),
+            "1_type": (None, "credentials"),
+            "1_email": (None, self.email),
+            "1_password": (None, self.password),
+            "0": (
+                None,
+                json.dumps(
+                    [{"action": "login", "returnURL": "https://playtomic.com/",
+                      "callbackURL": "$undefined"}, "$K1"]
+                ),
+            ),
+        }
 
-        # Set authorization header
-        self.session.headers.update({"Authorization": f"Bearer {self.access_token}"})
+        headers = {
+            "Accept": "text/x-component",
+            "Next-Action": action_id,
+            "Origin": AUTH_URL,
+            "Referer": url,
+        }
 
-        return response
+        # POST login, do not follow the 303 redirect automatically
+        response = self.session.post(
+            url, files=form_fields, headers=headers,
+            allow_redirects=False, timeout=10,
+        )
 
-    def fetch_availability(self, tenant_id, start_date, end_date):
-        """
-        Fetch the availability for a given tenant (court).
-        """
+        # Expect a 303 redirect on successful login
+        if response.status_code not in (303, 200):
+            response.raise_for_status()
+
+        # Extract auth tokens from cookies set by the response
+        self.access_token = self.session.cookies.get(
+            "pt_auth_access_token", domain=".playtomic.com"
+        )
+        refresh_token = self.session.cookies.get(
+            "pt_auth_refresh_token", domain=".playtomic.com"
+        )
+
+        if not self.access_token:
+            raise ValueError("Login failed: no access token cookie received.")
+
+        # Decode user_id from JWT payload
+        jwt_payload = self.__decode_jwt_payload(self.access_token)
+        self.user_id = jwt_payload.get("sub")
+
+        logger.info("Logged in successfully as user %s", self.user_id)
+
+        return {
+            "access_token": self.access_token,
+            "refresh_token": refresh_token,
+            "user_id": self.user_id,
+        }
+
+    def fetch_availability(self, tenant_id: Text, target_date: datetime) -> List:
+        """Fetch the availability for a given tenant (court) on a specific date."""
         if not self.access_token:
             self.login()
 
-        url = f"{API_URL}/availability"
+        url = f"{API_URL}/clubs/availability"
         params = {
-            "user_id": "me",
             "tenant_id": tenant_id,
+            "date": target_date.strftime("%Y-%m-%d"),
             "sport_id": "PADEL",
-            "local_start_min": start_date.strftime("%Y-%m-%dT%H:%M:%S"),
-            "local_start_max": end_date.strftime("%Y-%m-%dT%H:%M:%S"),
         }
 
         # Make HTTP request
